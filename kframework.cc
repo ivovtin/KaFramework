@@ -310,12 +310,13 @@ void kf_modify_header(int choice)
 
 static int last_event=0;
 static float lum_e=0, lum_p=0;
-//static float beam_energy=0;
 float beam_energy=0;
+float err_beam_energy=0;
 static float dbbeam_energy=0;
 
 //Get last valid event and RDM energy for the run from DB
-static bool get_run_data(int run)                                         //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+static bool get_run_data(int run)
 {
 	static const int lum_table_id=2007, lum_table_length=7;
 	static const int e_table_id=2119, e_table_length=16;
@@ -338,33 +339,13 @@ static bool get_run_data(int run)                                         //!!!!
 		lum_e=buflum[1]*1E-3;
 		last_event=buflum[2];
 
-	//cout<<"1-->"<<buflum[0]<<"  2-->"<<buflum[1]<<" 3-->"<<buflum[2]<<" 4-->"<<buflum[3]<<" 5-->"<<buflum[4]<<" 6-->"<<buflum[5]<<" 7-->"<<buflum[6]<<endl;
-	//	if(run==19654)
-	//	{ last_event=307251; }
 		rc=true;
 	}
-	//kdb_setver(conn,0);
+	kdb_setver(conn,0);
 	if( kdb_read_for_run(conn,e_table_id,run,bufenergy,e_table_length) ) {
 		beam_energy=bufenergy[1]*1E-6;
 		rc=true;
 	}
-
-        /*
-	void get_run_energy(int run, double *en, double *en_err) {
-	    int array[8];
-	    KdDbConn* conn;
-	    int id;
-
-	    conn = kd_db_open(NULL);
-	    id = kd_db_get_id("runenergy",conn);
-	    if (kd_db_get_for_run_int(id, run, conn, array, 8)) {
-		*en = array[1]/1e6;
-		*en_err = array[2]/1e6;
-	    }
-	    kd_db_close(conn);
-        */
-
-
 
         //===========================================================
 	int RunStatus=1;                                       //0-information in the start run; 1-information in the end run; 2 - information in the pause run
@@ -372,9 +353,6 @@ static bool get_run_data(int run)                                         //!!!!
 	if( kdb_run_get_info(conn,run,RunStatus,&runinfo) ) {
         last_event=runinfo.nread;
         dbbeam_energy=runinfo.E_setup*1E-3;
-	cout<<" kdb_run_get_info   ===>>   E_setup="<<runinfo.E_setup*1E-3<<endl;
-	cout<<" kdb_run_get_info   ===>>   NREAD="<<runinfo.nread<<endl;
-
 	rc=true;
 	}
         //===========================================================
@@ -387,6 +365,28 @@ static bool get_run_data(int run)                                         //!!!!
 
 	return rc;
 }
+
+/*
+static bool  get_run_energy(int run) {
+  double en_err, double lum, int t;
+
+  int array[8];
+  KdDbConn* conn;
+  KDBruninfo runinfo;
+  int id;
+
+  conn = kd_db_open(NULL);
+  id = kd_db_get_id("runenergy",conn);
+  if (kd_db_get_for_run_int(id, run, conn, array, 8)) {
+    beam_energy = array[1]/1e6;
+    err_beam_energy = array[2]/1e6;
+  }
+  if (kd_db_get_run_info(run, 1, conn, &runinfo))
+  lum = runinfo.intelum;
+  t = runinfo.livesec;
+  kd_db_close(conn);
+}
+*/
 
 //Finish processing the run
 
@@ -485,7 +485,7 @@ static int process(flist_exev_t& filelist, long long nevents)
 		atc_init(); //Unneccessary. Done in atc_event().
 
 		//turn on debugging in ATC for exclusive events
-//		if( process_only ) atcRec->debug=4;                            //!!!!!!!!!!!!!!!!!!!!!!!!!!!   - debug information for earch counter atc - ampl, type, npe ...
+//		if( process_only ) atcRec->debug=4;                            //debug information for earch counter atc - ampl, type, npe ...
 
 		kf_add_cut(KF_ATC_SEL,0,"reconstruction error");
 	}
