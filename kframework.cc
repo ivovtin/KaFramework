@@ -659,13 +659,19 @@ static int process(flist_exev_t& filelist, long long nevents)
 				simulation=true;
                                                                   //вызовы делаются перед началом чтения файла и вызовов подпрограмм реконструкции
 				if( use_dc ) {
-                                       // XTKey=0;   //05/06/2017 - попробовал
-				       // kdcsimxt();               //моделирование X(t) c "бесконечно хорошим" пространственным разрешением"
-				//	kdcsimsigma();            //при добавлении моделируется экспериментальное пространственное разрешение
-				//	kdcsimsysterr();          //при добавлении моделируется систематическая ошибка калибровки
+				    //XTKey=0;   //05/06/2017 - попробовал
+				    //kdcsimxt();               //моделирование X(t) c "бесконечно хорошим" пространственным разрешением"
+				    //kdcsimsigma();            //при добавлении моделируется экспериментальное пространственное разрешение
+				    //kdcsimsysterr();          //при добавлении моделируется систематическая ошибка калибровки
 
-					ksimreal(1,MCCalibRunNumber,MCCalibRunNumber);     //1/06/2017
-
+				    ksimreal(1,MCCalibRunNumber,MCCalibRunNumber);     //1/06/2017
+				    //for D-mesons
+				    kdcsimxt();
+				    kdcsimsigma();
+				    kdcsimsysterr();
+				    kdcscalesysterr(1);
+				    kdcscalesysterraz(1, 1);
+				    //
 				}
 
 				if( use_emc && callEMCexplicitly ) emc_run(1,0);
