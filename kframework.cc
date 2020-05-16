@@ -17,9 +17,9 @@
 #include "VDDCRec/kdcvd.h"
 #include "VDDCRec/ktracks.h"
 #include "VDDCRec/kglobparam.h"
-#ifdef DCPID
-#include "KrdEdxPId/KrdEdxPId.hh"
-#endif
+//#ifdef DCPID
+//#include "KrdEdxPId/KrdEdxPId.hh"
+//#endif
 #include "KrToF/tof_system.h"
 #include "KEmcRec/emc_system.h"
 #include "KrAtc/atcrec.h"
@@ -35,8 +35,10 @@
 #include "kf_event_stat.h"
 #include "kframework.h"
 
+
 //Reconstruction record unpack routine
 extern "C" void kedr_unpack_();
+extern "C" void kvdrtctrl_(int *, int *);
 
 using namespace std;
 
@@ -389,7 +391,6 @@ static bool  get_run_energy(int run) {
 */
 
 //Finish processing the run
-
 static void finish_run(int run)
 {
 	static clock_t clock_prev;
@@ -454,6 +455,13 @@ static int process(flist_exev_t& filelist, long long nevents)
 	if( use_dc ) {
 		kf_add_cut(KF_VDDC_SEL,0,"reconstruction error");
 
+		int fcosm = 2;
+		int fdb = 0;
+		kvdrtctrl_(&fcosm,&fdb);
+		kdcswitches_.kCosmInSigRuns = 0;
+		//kdcswitches_.kIPalternative = 1;
+		kdcswitches_.KemcAllowed = -1;
+
 		//Set flag for DC if reconstruction of cosmic tracks is required
 		if( cosmic>0 )
 			kdcvdcosmic();
@@ -467,15 +475,16 @@ static int process(flist_exev_t& filelist, long long nevents)
 	}
 
 	//Initialization of EM calorimeters
-	bool callEMCexplicitly=false;
+	//bool callEMCexplicitly=false;
 	if( use_emc ) {
-		if( !use_dc || use_dc && kdcswitches_.KemcAllowed<-1 ) {
-			callEMCexplicitly=true;
-			emc_init();
-		}
+		//if( !use_dc || use_dc && kdcswitches_.KemcAllowed<-1 ) {
+			//callEMCexplicitly=true;
+                        semc_cards.EMC_MASTER=0;
+	                emc_init();
+		//}
 
 		//turn on debugging in EMC for exclusive events
-		if( process_only ) semc_cards.EMC_DEBUG=2;
+		//if( process_only ) semc_cards.EMC_DEBUG=2;
 
 		kf_add_cut(KF_EMC_SEL,0,"reconstruction error");
 	}
@@ -674,7 +683,8 @@ static int process(flist_exev_t& filelist, long long nevents)
 				    //
 				}
 
-				if( use_emc && callEMCexplicitly ) emc_run(1,0);
+				//if( use_emc && callEMCexplicitly ) emc_run(1,0);
+				if( use_emc ) emc_run(MCCalibRunNumber,0);
 
 			} else if( kedrraw_.Header.RunNumber!=daqRun ) {
 				//Experiment file
@@ -695,22 +705,23 @@ static int process(flist_exev_t& filelist, long long nevents)
 				get_run_data(daqRun);
 
 				if( use_dc ) {
-					//automatic cosmic run determination
-					if( cosmic<0 ) {
-						if( kedrrun_cb_.Header.RunType==KRT_COSM ||
-							kedrrun_cb_.Header.RunType==KRT_COSM_A ) {
-							kdcvdcosmic();
-						} else {
-							kdcvdnocosmic();
-						}
+				    //automatic cosmic run determination
+				    if( cosmic<0 ) {
+					if( kedrrun_cb_.Header.RunType==KRT_COSM ||
+					   kedrrun_cb_.Header.RunType==KRT_COSM_A ) {
+					    kdcvdcosmic();
+					} else {
+					    kdcvdnocosmic();
 					}
-#ifdef DCPID
-					dcdedxpidinit(&daqRun);
-#endif
+				    }
+//#ifdef DCPID
+				    //dcdedxpidinit(&daqRun);
+//#endif
 				}
 				if( use_mu ) dcmu_init(daqRun,0);
 
-				if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
+				//if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
+				if( use_emc ) emc_run(daqRun,0);
 
 				//Note: DC, ToF, ATC reconstructions do initializations for runs
 				// by themselves in per-event calls
@@ -757,13 +768,14 @@ static int process(flist_exev_t& filelist, long long nevents)
 						//due to pre-rejection kdcenum_.EvNum isn't equal to event number
 						kdcenum_.EvNum=cur_event-1;
 						kdcvdrec(0,&res);
+                                                /*
 						if( res<0 ) {
 							(*dc_stat)[0]++;
 							break;
 						}
-#ifdef DCPID
-						if( !simulation ) pidevent();
-#endif
+//#ifdef DCPID                                  */
+//						if( !simulation ) pidevent();
+//#endif
 						res=0; //zero res if everything is Ok
 					}
 					//User's VDDC event rejection
@@ -779,10 +791,12 @@ static int process(flist_exev_t& filelist, long long nevents)
 				//ToF event selection
 				if( *iter==KF_TOF_SYSTEM ) {
 					res=tof_event();
+                                        /*
 					if( res ) {
 						(*tof_stat)[0]++;
 						break;
 					}
+                                        */
 					//User's ToF event rejection
 					if( reject_tof ) {
 						irej=reject_tof();
@@ -795,12 +809,15 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 				//EMC event selection
 				if( *iter==KF_EMC_SYSTEM ) {
-					if( !reco_from_file && callEMCexplicitly ) {
+					//if( !reco_from_file && callEMCexplicitly ) {
+					if( !reco_from_file ) {
 						res=emc_event();
+                                                /*
 						if( res ) {
 							(*emc_stat)[0]++;
 							break;
 						}
+                                                */
 					}
 					//User's EMC event rejection
 					if( reject_emc ) {
@@ -815,10 +832,12 @@ static int process(flist_exev_t& filelist, long long nevents)
 				//ATC event recontruction
 				if( *iter==KF_ATC_SYSTEM ) {
 					res=atc_event();
+                                        /*
 					if( res ) {
 						(*atc_stat)[0]++;
 						break;
 					}
+                                        */
 					//User's ATC event rejection
 					if( reject_atc ) {
 						irej=reject_atc();
@@ -834,10 +853,12 @@ static int process(flist_exev_t& filelist, long long nevents)
 					if( use_dc && simulation )
 						dcmu_simrun(1);
 					res=mu_next_event_good();
+                                        /*
 					if( res<0 ) {
 						(*mu_stat)[0]++;
 						break;
 					}
+                                        */
 					if( use_dc )
 						dcmu_next_tracks();
 					res=0;
@@ -854,7 +875,8 @@ static int process(flist_exev_t& filelist, long long nevents)
 			} //end of loop on systems
 
 			//Event was wrongly reconstructed or rejected by one of systems
-			if( res || irej ) continue;
+			//if( res || irej ) continue;
+        		if( irej ) continue;
 
 			//Apply post-event rejections
 			if( post_reject ) {
@@ -876,7 +898,6 @@ static int process(flist_exev_t& filelist, long long nevents)
 			}
 
 //			if( res==1 || display_all ) {
-//                        cout<<"kdcenum_.EvNum="<<kdcenum_.EvNum%1000<<endl;
 			if( kdcenum_.EvNum>=kdisp_ev && (res==1 || display_all) ) {                            //17/04/2018
 				if( drawn ) {
 					if( wait_user )
