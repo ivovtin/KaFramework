@@ -47,7 +47,7 @@ extern void kf_use(int sysmask);
   cosm <0 - auto cosmic run determination.*/
 extern void kf_cosmic(int cosm);
 
-extern void kf_MCCalibRunNumber(int MCCalibRunNumber1);
+extern void kf_MCCalibRunNumber(bool simOn,int MCCalibRunNumber1,int MCCalibRunNumber2,int NsimRate1,float scale1,float ascale1,float zscale1);
 extern void kf_kdisplay_cut(int kdisp_ev1);
 
 /*Set out NAT file name and write mode.

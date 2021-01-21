@@ -35,7 +35,6 @@
 #include "kf_event_stat.h"
 #include "kframework.h"
 
-
 //Reconstruction record unpack routine
 extern "C" void kedr_unpack_();
 extern "C" void kvdrtctrl_(int *, int *);
@@ -59,9 +58,16 @@ static list<int> sys_list;
 //Cosmic processing flag. Set with kf_cosmic().
 static int cosmic=0;
 
-int MCCalibRunNumber=19862;   //1/06/2017
+static bool simulation=false;
 
-int kdisp_ev=0;              //17/04/2017
+int MCCalibRunNumber=19862;
+int MCCalibRunNumberL=19862;
+int NsimRate=50;
+//float scale = 1.;
+//float ascale = 1.;
+//float zscale = 1.;
+
+int kdisp_ev=0;
 
 //Out NAT mode: 0 - single file (mSingleFile in ReadNat), 1 - one file per run (mRunFiles).
 //Set by kf_set_out_nat().
@@ -178,8 +184,16 @@ void kf_cosmic(int cosm)
 void kf_kdisplay_cut(int kdisp_ev1)
 { kdisp_ev=kdisp_ev1; }
 
-void kf_MCCalibRunNumber(int MCCalibRunNumber1)
-{ MCCalibRunNumber=MCCalibRunNumber1; }
+void kf_MCCalibRunNumber(bool simOn, int MCCalibRunNumber1, int MCCalibRunNumber2, int NsimRate1, float scale1, float ascale1, float zscale1)
+{
+    simulation=simOn;
+    MCCalibRunNumber=MCCalibRunNumber1;
+    MCCalibRunNumberL=MCCalibRunNumber2;
+    NsimRate=NsimRate1;
+    //scale=scale1;
+    //ascale=ascale1;
+    //zscale=zscale1;
+}
 
 //Set out NAT file name and write mode.
 void kf_set_out_nat(const char* fn,int mode)
@@ -453,40 +467,47 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 	//Initialization of VD&DC
 	if( use_dc ) {
-		kf_add_cut(KF_VDDC_SEL,0,"reconstruction error");
+            kf_add_cut(KF_VDDC_SEL,0,"reconstruction error");
 
-		int fcosm = 2;
-		int fdb = 0;
-		kvdrtctrl_(&fcosm,&fdb);
-		kdcswitches_.kCosmInSigRuns = 0;
-		//kdcswitches_.kIPalternative = 1;
-		kdcswitches_.KemcAllowed = -1;
+	    if( simulation ) {
+                kdcswitches_.KsimSystErr = 2; //or 1
+ 		//kdcswitches_.kCosmInSigRuns = 0;
+            	//kdcswitches_.kIPalternative = 1;
+            	//kdcswitches_.KemcAllowed = -1;
 
-		//Set flag for DC if reconstruction of cosmic tracks is required
-		if( cosmic>0 )
-			kdcvdcosmic();
-		else if( cosmic==0 )
-			kdcvdnocosmic();
+                //kdcsimxt();                    //no need call
+                //kdcsimsigma();                 //no need call simulation experimental resolution
+                //kdcsimsysterr();               //no need call simulation system. errors of calibration
+                //kdcscalesysterr(scale);
+                //kdcscalesysterraz(ascale, zscale);
+		ksimreal(NsimRate,MCCalibRunNumber,MCCalibRunNumberL);
+         }
+
+	    //Set flag for DC if reconstruction of cosmic tracks is required
+	    if( cosmic>0 )
+		kdcvdcosmic();
+	    else if( cosmic==0 )
+		kdcvdnocosmic();
 	}
 
 	//Initialization of ToF
 	if( use_tof ) {
+                tof_init();
 		kf_add_cut(KF_TOF_SEL,0,"reconstruction error");
 	}
 
 	//Initialization of EM calorimeters
-	//bool callEMCexplicitly=false;
+	bool callEMCexplicitly=false;
 	if( use_emc ) {
-		//if( !use_dc || use_dc && kdcswitches_.KemcAllowed<-1 ) {
-			//callEMCexplicitly=true;
-                        semc_cards.EMC_MASTER=0;
-	                emc_init();
-		//}
+	    if( !use_dc || use_dc && kdcswitches_.KemcAllowed<0 ) {
+	        callEMCexplicitly=true;
+	        emc_init();
+	    }
 
-		//turn on debugging in EMC for exclusive events
-		//if( process_only ) semc_cards.EMC_DEBUG=2;
+	    //turn on debugging in EMC for exclusive events
+	    if( process_only ) semc_cards.EMC_DEBUG=2;
 
-		kf_add_cut(KF_EMC_SEL,0,"reconstruction error");
+	        kf_add_cut(KF_EMC_SEL,0,"reconstruction error");
 	}
 
 	//Initialization of ATC
@@ -559,8 +580,6 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 	bool stop_job=false;
 
-	bool simulation=false;
-
 	flist_exev_t::iterator item=filelist.begin(), lastitem=filelist.end();
 
 	//Start loop on files
@@ -600,7 +619,7 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 			//last valid event in the run reached
 			if( !simulation )
-				if( last_event>0 && kedrraw_.Header.Number>last_event ) break;
+			        if( last_event>0 && kedrraw_.Header.Number>last_event ) break;
 
 			cur_event++;
 			file_event++;
@@ -662,29 +681,10 @@ static int process(flist_exev_t& filelist, long long nevents)
 			}
 
 			if( kedrrun_cb_.Header.RunType == KRT_SIM ) {
-				//Simulation file
 				//cout<<" Processing simulation file"<<endl;
-
 				simulation=true;
-                                                                  //вызовы делаются перед началом чтения файла и вызовов подпрограмм реконструкции
-				if( use_dc ) {
-				    //XTKey=0;   //05/06/2017 - попробовал
-				    //kdcsimxt();               //моделирование X(t) c "бесконечно хорошим" пространственным разрешением"
-				    //kdcsimsigma();            //при добавлении моделируется экспериментальное пространственное разрешение
-				    //kdcsimsysterr();          //при добавлении моделируется систематическая ошибка калибровки
 
-				    ksimreal(1,MCCalibRunNumber,MCCalibRunNumber);     //1/06/2017
-				    //for D-mesons
-				    kdcsimxt();
-				    kdcsimsigma();
-				    kdcsimsysterr();
-				    kdcscalesysterr(1);
-				    kdcscalesysterraz(1, 1);
-				    //
-				}
-
-				//if( use_emc && callEMCexplicitly ) emc_run(1,0);
-				if( use_emc ) emc_run(MCCalibRunNumber,0);
+	                        if( use_emc && callEMCexplicitly ) emc_run(MCCalibRunNumber,0);
 
 			} else if( kedrraw_.Header.RunNumber!=daqRun ) {
 				//Experiment file
@@ -720,8 +720,8 @@ static int process(flist_exev_t& filelist, long long nevents)
 				}
 				if( use_mu ) dcmu_init(daqRun,0);
 
-				//if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
-				if( use_emc ) emc_run(daqRun,0);
+				if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
+				//if( use_emc ) emc_run(daqRun,0);
 
 				//Note: DC, ToF, ATC reconstructions do initializations for runs
 				// by themselves in per-event calls
@@ -809,8 +809,8 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 				//EMC event selection
 				if( *iter==KF_EMC_SYSTEM ) {
-					//if( !reco_from_file && callEMCexplicitly ) {
-					if( !reco_from_file ) {
+					if( !reco_from_file && callEMCexplicitly ) {
+					//if( !reco_from_file ) {
 						res=emc_event();
                                                 /*
 						if( res ) {
@@ -898,7 +898,7 @@ static int process(flist_exev_t& filelist, long long nevents)
 			}
 
 //			if( res==1 || display_all ) {
-			if( kdcenum_.EvNum>=kdisp_ev && (res==1 || display_all) ) {                            //17/04/2018
+			if( kdcenum_.EvNum>=kdisp_ev && (res==1 || display_all) ) {
 				if( drawn ) {
 					if( wait_user )
 						getchar(); //Wait user
@@ -930,7 +930,7 @@ static int process(flist_exev_t& filelist, long long nevents)
 			getchar();
 		else
 			kf_display_sync(); //Wait until delay timer expires
-	//	kdisplay_stop();                                                                          !!!!!!!!!!!!!!!!!!!!!!-закоментил
+	//	kdisplay_stop();
 	}
 
 	if( runs.size()>1 ) {
