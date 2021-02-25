@@ -17,6 +17,7 @@
 #include "VDDCRec/kdcvd.h"
 #include "VDDCRec/ktracks.h"
 #include "VDDCRec/kglobparam.h"
+#include "VDDCRec/kdcpar.h"
 //#ifdef DCPID
 //#include "KrdEdxPId/KrdEdxPId.hh"
 //#endif
@@ -469,19 +470,33 @@ static int process(flist_exev_t& filelist, long long nevents)
 	if( use_dc ) {
             kf_add_cut(KF_VDDC_SEL,0,"reconstruction error");
 
+            kdcswitches_.kXTKey=1;
+            kdcswitches_.KcExp=0;
+
+            cout<<"kdcswitches_.kXTKey="<<kdcswitches_.kXTKey<<"\t"<<"kdcswitches_.KcExp="<<kdcswitches_.KcExp<<endl; 
+
 	    if( simulation ) {
-                kdcswitches_.KsimSystErr = 2; //or 1
+                kdcswitches_.KsimSystErr = 1; //or 2
+                cout<<"kdcswitches_.KsimSystErr="<<kdcswitches_.KsimSystErr<<endl;
  		//kdcswitches_.kCosmInSigRuns = 0;
             	//kdcswitches_.kIPalternative = 1;
             	//kdcswitches_.KemcAllowed = -1;
+                //kdcswitches_.KtofAllowed=2;
+
+                //kdcpar1_.SigZsyst0=1.;
+                //kdcpar1_.SigXsyst0=0.05;
 
                 //kdcsimxt();                    //no need call
-                //kdcsimsigma();                 //no need call simulation experimental resolution
+                //kdcnosimxt();                    //x(t) is not simulated 
+                //kdcsimsigma();                   //call simulation experimental resolution
                 //kdcsimsysterr();               //no need call simulation system. errors of calibration
                 //kdcscalesysterr(scale);
                 //kdcscalesysterraz(ascale, zscale);
+                //kdcscalesysterr(1.);
+                //kdcscalesysterraz(1., 1.);
+ 
 		ksimreal(NsimRate,MCCalibRunNumber,MCCalibRunNumberL);
-         }
+            }
 
 	    //Set flag for DC if reconstruction of cosmic tracks is required
 	    if( cosmic>0 )
@@ -713,7 +728,7 @@ static int process(flist_exev_t& filelist, long long nevents)
 					} else {
 					    kdcvdnocosmic();
 					}
-				    }
+				     }
 //#ifdef DCPID
 				    //dcdedxpidinit(&daqRun);
 //#endif
