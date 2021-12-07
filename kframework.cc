@@ -8,6 +8,7 @@
 #include <list>
 #include <sys/time.h>
 #include <csignal>
+#include "TSystem.h"
 
 #include "ReadNat/re_def.h"
 #include "ReadNat/rr_def.h"
@@ -18,6 +19,9 @@
 #include "VDDCRec/ktracks.h"
 #include "VDDCRec/kglobparam.h"
 #include "VDDCRec/kdcpar.h"
+
+//#define DCPID 1
+
 //#ifdef DCPID
 //#include "KrdEdxPId/KrdEdxPId.hh"
 //#endif
@@ -64,9 +68,18 @@ static bool simulation=false;
 int MCCalibRunNumber=19862;
 int MCCalibRunNumberL=19862;
 int NsimRate=50;
-//float scale = 1.;
-//float ascale = 1.;
-//float zscale = 1.;
+float scale = 1.;
+float ascale = 1.;
+float zscale = 1.;
+
+int recselect=0;
+//float Elkr0cut=900.;
+float Elkr0cut=200.;
+float EnergyLKR=0;
+float EnergyCSI[2]={0,0};
+
+static ProcInfo_t info;
+const float toMB = 1.f/1024.f;
 
 int kdisp_ev=0;
 
@@ -191,9 +204,9 @@ void kf_MCCalibRunNumber(bool simOn, int MCCalibRunNumber1, int MCCalibRunNumber
     MCCalibRunNumber=MCCalibRunNumber1;
     MCCalibRunNumberL=MCCalibRunNumber2;
     NsimRate=NsimRate1;
-    //scale=scale1;
-    //ascale=ascale1;
-    //zscale=zscale1;
+    scale=scale1;
+    ascale=ascale1;
+    zscale=zscale1;
 }
 
 //Set out NAT file name and write mode.
@@ -470,32 +483,57 @@ static int process(flist_exev_t& filelist, long long nevents)
 	if( use_dc ) {
             kf_add_cut(KF_VDDC_SEL,0,"reconstruction error");
 
-            kdcswitches_.kXTKey=1;
-            kdcswitches_.KcExp=0;
+	    //ksetxtversion(10);
 
-            cout<<"kdcswitches_.kXTKey="<<kdcswitches_.kXTKey<<"\t"<<"kdcswitches_.KcExp="<<kdcswitches_.KcExp<<endl; 
+	    kdcswitches_.kXTKey=1;
+            //kdcswitches_.kXTKey=0;
+            kdcswitches_.KcExp=0;
+            //kdcswitches_.KcExp=1;
+	    //kdcswitches_.kCosmInSigRuns = 0;
+	    //kdcswitches_.kIPalternative = 1;
+	    //kdcswitches_.KemcAllowed = -1;
+	    //kdcswitches_.KtofAllowed=-2;
+	    kdcswitches_.KtofAllowed=-1;
+
+	    //kdcpar1_.SigZsyst0=1.;
+	    //kdcpar1_.SigXsyst0=0.05;
+
+            cout<<"kdcswitches_.kXTKey="<<kdcswitches_.kXTKey<<"\t"<<"kdcswitches_.KcExp="<<kdcswitches_.KcExp<<endl;
 
 	    if( simulation ) {
                 kdcswitches_.KsimSystErr = 1; //or 2
                 cout<<"kdcswitches_.KsimSystErr="<<kdcswitches_.KsimSystErr<<endl;
- 		//kdcswitches_.kCosmInSigRuns = 0;
-            	//kdcswitches_.kIPalternative = 1;
-            	//kdcswitches_.KemcAllowed = -1;
-                //kdcswitches_.KtofAllowed=2;
-
-                //kdcpar1_.SigZsyst0=1.;
-                //kdcpar1_.SigXsyst0=0.05;
 
                 //kdcsimxt();                    //no need call
-                //kdcnosimxt();                    //x(t) is not simulated 
+                //kdcnosimxt();                    //x(t) is not simulated
                 //kdcsimsigma();                   //call simulation experimental resolution
                 //kdcsimsysterr();               //no need call simulation system. errors of calibration
                 //kdcscalesysterr(scale);
                 //kdcscalesysterraz(ascale, zscale);
                 //kdcscalesysterr(1.);
                 //kdcscalesysterraz(1., 1.);
- 
+
 		ksimreal(NsimRate,MCCalibRunNumber,MCCalibRunNumberL);
+
+		kdcsimxt();
+                kdcsimsigma();
+
+		kdcsimsysterr();
+                kdcscalesysterr(scale);
+		kdcscalesysterraz(ascale, zscale);
+
+#ifdef DCPID
+                dcdedxpidinit(&MCCalibRunNumber);
+		bool msk[6];
+		for(int i=0;i<6;i++) msk[i]=true;
+		msk[4]=false; //proton
+		//msk[3]=false; //kaon
+		//msk[2]=false; //pion
+		msk[1]=false; //muon
+		msk[0]=false; //electron
+		pidinitpar(0.00001,msk);
+#endif
+
             }
 
 	    //Set flag for DC if reconstruction of cosmic tracks is required
@@ -512,26 +550,22 @@ static int process(flist_exev_t& filelist, long long nevents)
 	}
 
 	//Initialization of EM calorimeters
-	bool callEMCexplicitly=false;
+	//bool callEMCexplicitly=false;
 	if( use_emc ) {
-	    if( !use_dc || use_dc && kdcswitches_.KemcAllowed<0 ) {
-	        callEMCexplicitly=true;
-	        emc_init();
-	    }
-
+	    //if( !use_dc || use_dc && kdcswitches_.KemcAllowed<0 ) {
+		//callEMCexplicitly=true;
+		emc_init();
+	    //}
 	    //turn on debugging in EMC for exclusive events
-	    if( process_only ) semc_cards.EMC_DEBUG=2;
-
-	        kf_add_cut(KF_EMC_SEL,0,"reconstruction error");
+	    //if( process_only ) semc_cards.EMC_DEBUG=2;
+	    kf_add_cut(KF_EMC_SEL,0,"reconstruction error");
 	}
 
 	//Initialization of ATC
 	if( use_atc ) {
 		atc_init(); //Unneccessary. Done in atc_event().
-
 		//turn on debugging in ATC for exclusive events
-//		if( process_only ) atcRec->debug=4;                            //debug information for earch counter atc - ampl, type, npe ...
-
+		//if( process_only ) atcRec->debug=4;                            //debug information for earch counter atc - ampl, type, npe ...
 		kf_add_cut(KF_ATC_SEL,0,"reconstruction error");
 	}
 
@@ -697,9 +731,9 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 			if( kedrrun_cb_.Header.RunType == KRT_SIM ) {
 				//cout<<" Processing simulation file"<<endl;
-				simulation=true;
+			        simulation=true;
 
-	                        if( use_emc && callEMCexplicitly ) emc_run(MCCalibRunNumber,0);
+	                        //if( use_emc && callEMCexplicitly ) emc_run(MCCalibRunNumber,0);
 
 			} else if( kedrraw_.Header.RunNumber!=daqRun ) {
 				//Experiment file
@@ -728,14 +762,24 @@ static int process(flist_exev_t& filelist, long long nevents)
 					} else {
 					    kdcvdnocosmic();
 					}
-				     }
-//#ifdef DCPID
-				    //dcdedxpidinit(&daqRun);
-//#endif
+				    }
+
+#ifdef DCPID
+				    dcdedxpidinit(&daqRun);
+				    bool msk[6];
+				    for(int i=0;i<6;i++) msk[i]=true;
+				    msk[4]=false; //proton
+				    //msk[3]=false; //kaon
+				    //msk[2]=false; //pion
+				    msk[1]=false; //muon
+				    msk[0]=false; //electron
+				    pidinitpar(0.00001,msk);
+#endif
+
 				}
 				if( use_mu ) dcmu_init(daqRun,0);
 
-				if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
+				//if( use_emc && callEMCexplicitly ) emc_run(daqRun,0);
 				//if( use_emc ) emc_run(daqRun,0);
 
 				//Note: DC, ToF, ATC reconstructions do initializations for runs
@@ -777,20 +821,35 @@ static int process(flist_exev_t& filelist, long long nevents)
 			//loop on registered systems
 			for( ; iter!=sys_list.end(); iter++ )
 			{
-				//VD&DC event reconstruction
+			        //VD&DC event reconstruction
 				if( *iter==KF_VDDC_SYSTEM ) {
 					if( !reco_from_file ) {
 						//due to pre-rejection kdcenum_.EvNum isn't equal to event number
 						kdcenum_.EvNum=cur_event-1;
-						kdcvdrec(0,&res);
                                                 /*
+                                                //for BhaBha
+						if(simulation){
+						    kdcvdrec(-9,&res);
+        				            kemc_energy(EnergyCSI,&EnergyLKR);
+				                    //kdc1trk_elkr_(&Elkr0cut);
+				                    if( EnergyLKR>Elkr0cut ) kdcvdrec(0,&res);
+                                                }
+                                                else{
+                                                    kdcvdrec(0,&res);
+						}
+                                                */
+						//cosmic
+                                                kdcvdrec(0,&res);
+	                                        /*
 						if( res<0 ) {
 							(*dc_stat)[0]++;
 							break;
 						}
-//#ifdef DCPID                                  */
-//						if( !simulation ) pidevent();
-//#endif
+						*/
+
+#ifdef DCPID
+						pidevent();
+#endif
 						res=0; //zero res if everything is Ok
 					}
 					//User's VDDC event rejection
@@ -824,16 +883,17 @@ static int process(flist_exev_t& filelist, long long nevents)
 
 				//EMC event selection
 				if( *iter==KF_EMC_SYSTEM ) {
-					if( !reco_from_file && callEMCexplicitly ) {
+			       /*
+				       if( !reco_from_file && callEMCexplicitly )
+				       {
 					//if( !reco_from_file ) {
 						res=emc_event();
-                                                /*
 						if( res ) {
 							(*emc_stat)[0]++;
 							break;
 						}
-                                                */
 					}
+                                        */
 					//User's EMC event rejection
 					if( reject_emc ) {
 						irej=reject_emc();
