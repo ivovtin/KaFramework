@@ -20,11 +20,11 @@
 #include "VDDCRec/kglobparam.h"
 #include "VDDCRec/kdcpar.h"
 
-//#define DCPID 1
+#define DCPID 1
 
-//#ifdef DCPID
-//#include "KrdEdxPId/KrdEdxPId.hh"
-//#endif
+#ifdef DCPID
+#include "KrdEdxPId/KrdEdxPId.hh"
+#endif
 #include "KrToF/tof_system.h"
 #include "KEmcRec/emc_system.h"
 #include "KrAtc/atcrec.h"
